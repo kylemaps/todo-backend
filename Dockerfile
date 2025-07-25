@@ -29,4 +29,5 @@ COPY --from=builder /usr/src/app .
 EXPOSE 3001
 
 # Start the application
+# Trigger new build with comment
 CMD ["npm", "start"]
