@@ -153,20 +153,37 @@ router.post('/todos', async (ctx) => {
 
   try {
     const trimmedTodo = newTodo.trim();
+
+    // --- IMPROVEMENT ---
+    // The original code performed an INSERT and then a separate SELECT to find the new todo for the NATS event.
+    // This is inefficient and could be unreliable.
+    // By using the `RETURNING *` clause with the INSERT statement, we can get the newly created todo
+    // back in a single, atomic database operation. This is more performant and guarantees we publish
+    // the correct event.
+    const insertResult = await pool.query(
+      'INSERT INTO todos (task) VALUES ($1) RETURNING *',
+      [trimmedTodo]
+    );
+    const createdTodo = insertResult.rows[0];
+
+    /*
+    // --- OLD CODE (COMMENTED OUT FOR REFERENCE) ---
     await pool.query('INSERT INTO todos (task) VALUES ($1)', [trimmedTodo]);
     const result = await pool.query('SELECT id, task, done FROM todos ORDER BY id ASC');
+    */
+
+    // The client expects the full list of todos back to re-render the UI.
+    // So, we still need to fetch the complete list after the successful insert.
+    const allTodosResult = await pool.query('SELECT id, task, done FROM todos ORDER BY id ASC');
 
     ctx.status = 201;
-    ctx.body = { message: 'Todo created', todos: result.rows };
-    logger.info(`Todo created: "${trimmedTodo}"`);
+    ctx.body = { message: 'Todo created', todos: allTodosResult.rows };
+    logger.info(`Todo created: "%s"`, trimmedTodo);
 
-    // Publish to NATS
-    if (nc) {
-      const createdTodo = result.rows.find(t => t.task === trimmedTodo);
-      if (createdTodo) {
-        nc.publish('todos.events', JSON.stringify({ eventType: 'created', todo: createdTodo }));
-        logger.info(`Published 'created' event for todo ${createdTodo.id} to NATS`);
-      }
+    // Publish to NATS using the directly returned 'createdTodo' from the INSERT...RETURNING query.
+    if (nc && createdTodo) {
+      nc.publish('todos.events', JSON.stringify({ eventType: 'created', todo: createdTodo }));
+      logger.info(`Published 'created' event for todo %s to NATS`, createdTodo.id);
     }
   } catch (err) {
     logger.error('Error adding todo:', err.message);
