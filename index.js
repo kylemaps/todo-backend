@@ -168,8 +168,8 @@ router.post('/todos', async (ctx) => {
 
     /*
     // --- OLD CODE (COMMENTED OUT FOR REFERENCE) ---
-    await pool.query('INSERT INTO todos (task) VALUES ($1)', [trimmedTodo]);
-    const result = await pool.query('SELECT id, task, done FROM todos ORDER BY id ASC');
+    // await pool.query('INSERT INTO todos (task) VALUES ($1)', [trimmedTodo]);
+    // const result = await pool.query('SELECT id, task, done FROM todos ORDER BY id ASC');
     */
 
     // The client expects the full list of todos back to re-render the UI.
