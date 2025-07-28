@@ -231,6 +231,38 @@ router.put('/todos/:id', async (ctx) => {
   }
 });
 
+// ✅ DELETE /todos/:id - Delete a todo
+router.delete('/todos/:id', async (ctx) => {
+  const { id } = ctx.params;
+
+  try {
+    const result = await pool.query(
+      'DELETE FROM todos WHERE id = $1 RETURNING *',
+      [id]
+    );
+
+    if (result.rowCount === 0) {
+      ctx.status = 404;
+      ctx.body = { error: 'Todo not found' };
+      return;
+    }
+
+    ctx.status = 200;
+    ctx.body = { message: 'Todo deleted', todo: result.rows[0] };
+    logger.info(`Todo ${id} deleted`);
+
+    // Publish to NATS
+    if (nc) {
+      nc.publish('todos.events', JSON.stringify({ eventType: 'deleted', todo: result.rows[0] }));
+      logger.info(`Published 'deleted' event for todo ${id} to NATS`);
+    }
+  } catch (err) {
+    logger.error(`Error deleting todo ${id}:`, err.message);
+    ctx.status = 500;
+    ctx.body = { error: 'Failed to delete todo' };
+  }
+});
+
 app.use(router.routes());
 app.use(router.allowedMethods());
 
